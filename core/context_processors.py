@@ -1,6 +1,9 @@
 from decimal import Decimal, ROUND_HALF_UP
 from itertools import islice
+from django.core.cache import cache
 from .models import InventoryItem, LabTest, StockMovement
+
+ACTIVITY_FEED_TTL = 60
 
 
 def _fmt(value):
@@ -11,10 +14,7 @@ def _fmt(value):
         return value
 
 
-def activity_feed(request):
-    if not request.user.is_authenticated:
-        return {}
-
+def _build_activity_feed():
     events = []
 
     for m in StockMovement.objects.select_related('inventory_item').order_by('-timestamp')[:20]:
@@ -33,5 +33,17 @@ def activity_feed(request):
         events.append({'ts': test.created_at, 'label': f"New test added: {test.name}", 'kind': 'new_test'})
 
     events.sort(key=lambda e: e['ts'], reverse=True)
+    return list(islice(events, 5))
 
-    return {'activity_feed': list(islice(events, 5))}
+
+def activity_feed(request):
+    if not request.user.is_authenticated:
+        return {}
+
+    cache_key = 'activity_feed'
+    feed = cache.get(cache_key)
+    if feed is None:
+        feed = _build_activity_feed()
+        cache.set(cache_key, feed, ACTIVITY_FEED_TTL)
+
+    return {'activity_feed': feed}

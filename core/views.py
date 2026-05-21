@@ -125,7 +125,9 @@ def inventory_restock(request, item_id):
 
 @login_required
 def test_list(request):
-    tests = LabTest.objects.prefetch_related('consumptions').all()
+    tests = LabTest.objects.prefetch_related(
+        'consumptions__inventory_item'
+    ).all()
     return render(request, 'tests/list.html', {'tests': tests})
 
 
