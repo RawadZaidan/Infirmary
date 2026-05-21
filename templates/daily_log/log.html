@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% load core_extras %}
+
+{% block title %}Daily Log {{ log_date }} — BioLab{% endblock %}
+{% block page_title %}Daily Log{% endblock %}
+{% block nav_daily_log %}active{% endblock %}
+
+{% block top_actions %}
+  {% if not is_today %}
+  <a href="{% url 'daily_log_today' %}" class="btn btn-secondary btn-sm">Go to Today</a>
+  {% endif %}
+{% endblock %}
+
+{% block content %}
+
+<!-- Date navigation -->
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:20px;">
+  <a href="{% url 'daily_log' prev_date %}" class="btn btn-ghost btn-sm">&#8592;</a>
+  <div style="text-align:center;">
+    <div style="font-size:18px;font-weight:700;color:var(--text);">
+      {{ log_date|date:"l, N j, Y" }}
+    </div>
+    {% if is_today %}
+    <div style="font-size:11px;color:var(--accent);margin-top:2px;">Today</div>
+    {% endif %}
+  </div>
+  {% if next_date %}
+  <a href="{% url 'daily_log' next_date %}" class="btn btn-ghost btn-sm">&#8594;</a>
+  {% else %}
+  <span class="btn btn-ghost btn-sm" style="opacity:.3;cursor:default;">&#8594;</span>
+  {% endif %}
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 340px;gap:20px;align-items:start;">
+
+  <!-- Main: Entries -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Tests Performed</span>
+        <span class="badge badge-reagent">{{ entries|length }} entr{% if entries|length == 1 %}y{% else %}ies{% endif %}</span>
+      </div>
+
+      {% if entries %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Lab Test</th>
+              <th class="text-right">Times Performed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in entries %}
+            <tr>
+              <td class="fw-600">{{ entry.lab_test.name }}</td>
+              <td class="text-right mono text-accent">{{ entry.quantity_performed }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty-state" style="padding:24px 0;">
+        No entries for this day yet.
+      </div>
+      {% endif %}
+    </div>
+
+    {% if consumed %}
+    <div class="card">
+      <div class="card-title mb-2">Inventory Consumed Today</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Unit</th>
+              <th class="text-right">Consumed</th>
+              <th class="text-right">Current Stock</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in consumed %}
+            <tr class="{% if row.item.is_deficit %}row-deficit{% elif row.item.is_low %}row-low{% endif %}">
+              <td class="fw-600">{{ row.item.name }}</td>
+              <td class="text-muted">{{ row.item.unit }}</td>
+              <td class="text-right mono" style="color:var(--low);">-{{ row.total|qty }}</td>
+              <td class="text-right mono {% if row.item.is_deficit %}text-deficit{% elif row.item.is_low %}text-low{% endif %}">
+                {{ row.item.quantity_in_stock|qty }}
+              </td>
+              <td><span class="badge badge-{{ row.item.status|status_class }}">{{ row.item.status }}</span></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Sidebar: Add entry form -->
+  <div>
+    <div class="card">
+      <div class="card-title mb-2">Add Entry</div>
+      <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+          <label class="form-label">Lab Test</label>
+          {{ form.lab_test }}
+          {% if form.lab_test.errors %}<div class="form-errors">{{ form.lab_test.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Times Performed</label>
+          {{ form.quantity_performed }}
+          {% if form.quantity_performed.errors %}<div class="form-errors">{{ form.quantity_performed.errors }}</div>{% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary w-full">
+          Log &amp; Deduct Inventory
+        </button>
+      </form>
+
+      {% if log.notes %}
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);font-size:12px;color:var(--text-muted);">
+        <strong style="color:var(--text);">Notes:</strong><br>{{ log.notes }}
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card" style="font-size:12px;color:var(--text-muted);">
+      <div style="margin-bottom:8px;font-weight:600;color:var(--text);font-size:13px;">Quick Nav</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        {% for offset in "0123456" %}
+        {% endfor %}
+      </div>
+      <p>Use the arrows above to browse past days.</p>
+      <p class="mt-1">Inventory deduction happens immediately on entry submission.</p>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

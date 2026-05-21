@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Edit {{ item.name }} — BioLab{% endblock %}
+{% block page_title %}Edit Item{% endblock %}
+{% block nav_inventory %}active{% endblock %}
+
+{% block top_actions %}
+  <a href="{% url 'inventory_list' %}" class="btn btn-ghost btn-sm">&#8592; Back to Inventory</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:560px;">
+  <div class="card-title mb-2">{{ item.name }}</div>
+  <p class="text-muted" style="font-size:12px;margin-bottom:16px;">
+    Last updated {{ item.updated_at|date:"N j, Y" }}
+  </p>
+
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-grid form-grid-2">
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        {{ form.name }}
+        {% if form.name.errors %}<div class="form-errors">{{ form.name.errors }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        {{ form.category }}
+      </div>
+      <div class="form-group">
+        <label class="form-label">Unit</label>
+        {{ form.unit }}
+        {% if form.unit.errors %}<div class="form-errors">{{ form.unit.errors }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label class="form-label">Quantity in Stock</label>
+        {{ form.quantity_in_stock }}
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reorder Threshold</label>
+        {{ form.reorder_threshold }}
+      </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button type="submit" class="btn btn-primary">Save Changes</button>
+      <a href="{% url 'inventory_list' %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

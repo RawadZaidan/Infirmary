@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+{% load core_extras %}
+
+{% block title %}Lab Tests — BioLab{% endblock %}
+{% block page_title %}Lab Tests{% endblock %}
+{% block nav_tests %}active{% endblock %}
+
+{% block top_actions %}
+  <button class="btn btn-primary btn-sm" onclick="openSheet('tests-sheet')">+ Log Tests Today</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Bulk log sheet ── -->
+<div class="sheet-backdrop" id="tests-sheet-backdrop" onclick="closeSheet('tests-sheet')"></div>
+<div class="sheet" id="tests-sheet">
+  <div class="sheet-header">
+    <span class="sheet-title">Log Tests — Today</span>
+    <button class="sheet-close" onclick="closeSheet('tests-sheet')" title="Close">&times;</button>
+  </div>
+  <form method="post" action="{% url 'test_bulk_log' %}">
+    {% csrf_token %}
+    <div class="sheet-body">
+      <p class="text-muted mb-2" style="font-size:12px;">
+        Select tests performed today and enter how many times each was run. Inventory is deducted automatically. Blank rows are skipped.
+      </p>
+      <div style="overflow-x:auto;">
+        <table class="intake-table">
+          <thead>
+            <tr>
+              <th style="min-width:260px;">Test *</th>
+              <th style="min-width:130px;">Times Performed *</th>
+              <th style="width:32px;"></th>
+            </tr>
+          </thead>
+          <tbody id="tests-rows">
+            {% for i in "123" %}
+            <tr class="intake-data-row">
+              <td>
+                <select name="test_id" class="form-control">
+                  <option value="">— select test —</option>
+                  {% for test in tests %}
+                  <option value="{{ test.pk }}">{{ test.name }}</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td><input type="number" name="quantity_performed" class="form-control" min="1" step="1" placeholder="e.g. 3"></td>
+              <td><button type="button" class="intake-row-del" onclick="removeTestRow(this)" title="Remove">&times;</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm mt-2" onclick="addTestRow()">+ Add Row</button>
+    </div>
+    <div class="sheet-footer">
+      <button type="submit" class="btn btn-primary">Log &amp; Deduct Inventory</button>
+      <button type="button" class="btn btn-ghost" onclick="closeSheet('tests-sheet')">Cancel</button>
+    </div>
+  </form>
+</div>
+
+{% if tests %}
+<!-- Search / filter bar -->
+<div style="margin-bottom:16px;display:flex;gap:10px;align-items:center;">
+  <input type="text" id="testSearch" class="form-control" placeholder="Filter tests…"
+         style="max-width:320px;" oninput="filterTests(this.value)">
+  <span id="testCount" class="text-muted" style="font-size:12px;white-space:nowrap;">{{ tests|length }} tests</span>
+</div>
+
+<div class="card" style="padding:0;overflow:hidden;">
+  <div class="table-wrap">
+    <table id="testTable">
+      <thead>
+        <tr>
+          <th style="width:28px;"></th>
+          <th>Test Name</th>
+          <th>Description</th>
+          <th style="width:110px;">Reagents</th>
+          <th class="text-right" style="width:90px;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for test in tests %}
+        <tr class="test-row" data-name="{{ test.name|lower }}" data-test-id="{{ test.pk }}"
+            style="cursor:pointer;" onclick="toggleConsumptions({{ test.pk }})">
+          <td style="padding-left:14px;">
+            <span class="expand-icon" id="icon-{{ test.pk }}"
+                  style="display:inline-block;transition:transform 0.15s;color:var(--text-muted);font-size:10px;">&#9654;</span>
+          </td>
+          <td class="fw-600">{{ test.name }}</td>
+          <td class="text-muted" style="max-width:340px;font-size:12px;">
+            {% if test.description %}{{ test.description|truncatechars:90 }}{% else %}<span style="opacity:.35;">—</span>{% endif %}
+          </td>
+          <td>
+            {% with cnt=test.consumptions.count %}
+              {% if cnt %}
+                <span class="badge badge-reagent">{{ cnt }} item{{ cnt|pluralize }}</span>
+              {% else %}
+                <span class="text-muted" style="font-size:12px;">none</span>
+              {% endif %}
+            {% endwith %}
+          </td>
+          <td class="text-right" onclick="event.stopPropagation()">
+            <a href="{% url 'test_edit' test.pk %}" class="btn btn-ghost btn-xs">Edit</a>
+          </td>
+        </tr>
+        <!-- Expandable consumption detail row -->
+        <tr class="consumption-detail" id="detail-{{ test.pk }}" style="display:none;">
+          <td></td>
+          <td colspan="4" style="padding:0 0 12px 12px;background:rgba(88,166,255,0.03);">
+            {% with consumptions=test.consumptions.all %}
+            {% if consumptions %}
+            <table style="width:auto;min-width:420px;margin-top:2px;">
+              <thead>
+                <tr>
+                  <th style="font-size:10px;padding:5px 12px 5px 0;color:var(--text-muted);">Reagent / Consumable</th>
+                  <th style="font-size:10px;padding:5px 12px 5px 0;color:var(--text-muted);">Category</th>
+                  <th style="font-size:10px;padding:5px 12px 5px 0;color:var(--text-muted);">Qty / Run</th>
+                  <th style="font-size:10px;padding:5px 0;color:var(--text-muted);">Unit</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for c in consumptions %}
+                <tr>
+                  <td style="padding:4px 12px 4px 0;font-size:12px;font-weight:500;border-bottom:1px solid var(--border);">
+                    {{ c.inventory_item.name }}
+                  </td>
+                  <td style="padding:4px 12px 4px 0;font-size:11px;border-bottom:1px solid var(--border);">
+                    {% if c.inventory_item.category == 'REAGENT' %}
+                      <span class="badge badge-reagent" style="font-size:10px;">Reagent</span>
+                    {% else %}
+                      <span class="badge badge-consumable" style="font-size:10px;">Consumable</span>
+                    {% endif %}
+                  </td>
+                  <td style="padding:4px 12px 4px 0;font-size:12px;border-bottom:1px solid var(--border);">
+                    <span class="mono text-accent">{{ c.quantity_consumed_per_test|qty }}</span>
+                  </td>
+                  <td style="padding:4px 0;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border);">
+                    {{ c.inventory_item.unit }}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+            {% else %}
+            <span class="text-muted" style="font-size:12px;display:inline-block;padding:8px 0;">
+              No reagents mapped — <a href="{% url 'test_edit' test.pk %}" style="color:var(--accent);">add items</a>.
+            </span>
+            {% endif %}
+            {% endwith %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{% else %}
+<div class="card">
+  <div class="empty-state">
+    No lab tests defined yet.<br>
+    <a href="{% url 'test_add' %}" class="btn btn-primary btn-sm mt-2">Add your first test</a>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const TEST_OPTIONS = (function() {
+  const sel = document.querySelector('#tests-rows select[name="test_id"]');
+  return sel ? sel.innerHTML : '';
+})();
+
+function openSheet(id) {
+  document.getElementById(id).classList.add('open');
+  document.getElementById(id + '-backdrop').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeSheet(id) {
+  document.getElementById(id).classList.remove('open');
+  document.getElementById(id + '-backdrop').classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+function removeTestRow(btn) {
+  const rows = document.querySelectorAll('#tests-rows .intake-data-row');
+  if (rows.length > 1) btn.closest('tr').remove();
+}
+
+function addTestRow() {
+  const tbody = document.getElementById('tests-rows');
+  const tr = document.createElement('tr');
+  tr.className = 'intake-data-row';
+  tr.innerHTML = `
+    <td><select name="test_id" class="form-control">${TEST_OPTIONS}</select></td>
+    <td><input type="number" name="quantity_performed" class="form-control" min="1" step="1" placeholder="e.g. 3"></td>
+    <td><button type="button" class="intake-row-del" onclick="removeTestRow(this)" title="Remove">&times;</button></td>
+  `;
+  tbody.appendChild(tr);
+  tr.querySelector('select').focus();
+}
+
+function toggleConsumptions(id) {
+  const row = document.getElementById('detail-' + id);
+  const icon = document.getElementById('icon-' + id);
+  const open = row.style.display !== 'none';
+  row.style.display = open ? 'none' : 'table-row';
+  icon.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function filterTests(q) {
+  q = q.toLowerCase().trim();
+  const rows = document.querySelectorAll('.test-row');
+  let visible = 0;
+  rows.forEach(row => {
+    const name = row.dataset.name || '';
+    const matches = !q || name.includes(q);
+    row.style.display = matches ? '' : 'none';
+    const detail = document.getElementById('detail-' + row.dataset.testId);
+    if (detail) detail.style.display = 'none';
+    const icon = document.getElementById('icon-' + row.dataset.testId);
+    if (icon) icon.style.transform = '';
+    if (matches) visible++;
+  });
+  document.getElementById('testCount').textContent = visible + ' test' + (visible !== 1 ? 's' : '');
+}
+
+{% if open_sheet %}
+openSheet('tests-sheet');
+{% endif %}
+</script>
+{% endblock %}

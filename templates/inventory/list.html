@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% load core_extras %}
+
+{% block title %}Inventory — BioLab{% endblock %}
+{% block page_title %}Inventory{% endblock %}
+{% block nav_inventory %}active{% endblock %}
+
+{% block top_actions %}
+  <button class="btn btn-primary btn-sm" onclick="openSheet('receive-sheet')">+ Receive Items</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Bulk receive sheet ── -->
+<div class="sheet-backdrop" id="receive-sheet-backdrop" onclick="closeSheet('receive-sheet')"></div>
+<div class="sheet" id="receive-sheet">
+  <div class="sheet-header">
+    <span class="sheet-title">Receive Items</span>
+    <button class="sheet-close" onclick="closeSheet('receive-sheet')" title="Close">&times;</button>
+  </div>
+  <form method="post" action="{% url 'inventory_bulk_receive' %}">
+    {% csrf_token %}
+    <div class="sheet-body">
+      <p class="text-muted mb-2" style="font-size:12px;">
+        Select items from stock, enter the quantity received, and an optional reason. Blank rows are skipped.
+      </p>
+      <div style="overflow-x:auto;">
+        <table class="intake-table">
+          <thead>
+            <tr>
+              <th style="min-width:220px;">Item *</th>
+              <th style="min-width:110px;">Qty Received *</th>
+              <th style="min-width:220px;">Reason</th>
+              <th style="width:32px;"></th>
+            </tr>
+          </thead>
+          <tbody id="receive-rows">
+            {% for i in "123" %}
+            <tr class="intake-data-row">
+              <td>
+                <select name="item_id" class="form-control receive-item-select" onchange="updateUnit(this)">
+                  <option value="">— select item —</option>
+                  {% for item in items %}
+                  <option value="{{ item.pk }}" data-unit="{{ item.unit }}">{{ item.name }} ({{ item.unit }})</option>
+                  {% endfor %}
+                </select>
+              </td>
+              <td>
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <input type="number" name="quantity" class="form-control" step="0.0001" min="0.0001" placeholder="0">
+                  <span class="unit-label text-muted" style="font-size:11px;white-space:nowrap;min-width:28px;"></span>
+                </div>
+              </td>
+              <td><input type="text" name="reason" class="form-control" placeholder="e.g. Purchase order #42"></td>
+              <td><button type="button" class="intake-row-del" onclick="removeReceiveRow(this)" title="Remove">&times;</button></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm mt-2" onclick="addReceiveRow()">+ Add Row</button>
+    </div>
+    <div class="sheet-footer">
+      <button type="submit" class="btn btn-primary">Confirm Receipt</button>
+      <button type="button" class="btn btn-ghost" onclick="closeSheet('receive-sheet')">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  {% if items %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Unit</th>
+          <th>In Stock</th>
+          <th>Threshold</th>
+          <th>Status</th>
+          <th class="text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in items %}
+        <tr class="{% if item.is_deficit %}row-deficit{% elif item.is_low %}row-low{% endif %}">
+          <td class="fw-600">{{ item.name }}</td>
+          <td>
+            <span class="badge {% if item.category == 'REAGENT' %}badge-reagent{% else %}badge-consumable{% endif %}">
+              {{ item.get_category_display }}
+            </span>
+          </td>
+          <td class="text-muted">{{ item.unit }}</td>
+          <td class="mono {% if item.is_deficit %}text-deficit{% elif item.is_low %}text-low{% endif %}">
+            {{ item.quantity_in_stock|qty }}
+          </td>
+          <td class="mono text-muted">{{ item.reorder_threshold|qty }}</td>
+          <td>
+            <span class="badge badge-{{ item.status|status_class }}">{{ item.status }}</span>
+          </td>
+          <td class="text-right">
+            <div style="display:flex;gap:6px;justify-content:flex-end;">
+              <a href="{% url 'inventory_edit' item.pk %}" class="btn btn-ghost btn-xs">Edit</a>
+              <button class="btn btn-secondary btn-xs" onclick="toggleRestock('restock-{{ item.pk }}')">Restock</button>
+            </div>
+          </td>
+        </tr>
+        <tr id="restock-{{ item.pk }}" class="restock-row">
+          <td colspan="7">
+            <form method="post" action="{% url 'inventory_restock' item.pk %}" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+              {% csrf_token %}
+              <div class="form-group" style="margin:0;min-width:140px;">
+                <label class="form-label">Add Quantity ({{ item.unit }})</label>
+                <input type="number" name="quantity" step="0.0001" min="0.0001" class="form-control" placeholder="e.g. 100" required>
+              </div>
+              <div class="form-group" style="margin:0;flex:1;min-width:200px;">
+                <label class="form-label">Reason</label>
+                <input type="text" name="reason" class="form-control" placeholder="Purchase order, donation, etc.">
+              </div>
+              <div style="display:flex;gap:6px;">
+                <button type="submit" class="btn btn-primary btn-sm">Confirm</button>
+                <button type="button" class="btn btn-ghost btn-sm" onclick="toggleRestock('restock-{{ item.pk }}')">Cancel</button>
+              </div>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    No inventory items yet. Add items via Django Admin or import them first.
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Serialise item options once so JS-added rows get the same list
+  const ITEM_OPTIONS = (function() {
+    const sel = document.querySelector('.receive-item-select');
+    return sel ? sel.innerHTML : '';
+  })();
+
+  function openSheet(id) {
+    document.getElementById(id).classList.add('open');
+    document.getElementById(id + '-backdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSheet(id) {
+    document.getElementById(id).classList.remove('open');
+    document.getElementById(id + '-backdrop').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  function updateUnit(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    const unit = opt ? (opt.dataset.unit || '') : '';
+    const label = sel.closest('tr').querySelector('.unit-label');
+    if (label) label.textContent = unit;
+  }
+
+  function removeReceiveRow(btn) {
+    const rows = document.querySelectorAll('#receive-rows .intake-data-row');
+    if (rows.length > 1) btn.closest('tr').remove();
+  }
+
+  function addReceiveRow() {
+    const tbody = document.getElementById('receive-rows');
+    const tr = document.createElement('tr');
+    tr.className = 'intake-data-row';
+    tr.innerHTML = `
+      <td>
+        <select name="item_id" class="form-control receive-item-select" onchange="updateUnit(this)">
+          ${ITEM_OPTIONS}
+        </select>
+      </td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          <input type="number" name="quantity" class="form-control" step="0.0001" min="0.0001" placeholder="0">
+          <span class="unit-label text-muted" style="font-size:11px;white-space:nowrap;min-width:28px;"></span>
+        </div>
+      </td>
+      <td><input type="text" name="reason" class="form-control" placeholder="e.g. Purchase order #42"></td>
+      <td><button type="button" class="intake-row-del" onclick="removeReceiveRow(this)" title="Remove">&times;</button></td>
+    `;
+    tbody.appendChild(tr);
+    tr.querySelector('select').focus();
+  }
+
+  function toggleRestock(id) {
+    document.querySelectorAll('.restock-row.open').forEach(r => {
+      if (r.id !== id) r.classList.remove('open');
+    });
+    document.getElementById(id).classList.toggle('open');
+  }
+</script>
+{% endblock %}

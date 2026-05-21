@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Add Lab Test — BioLab{% endblock %}
+{% block page_title %}New Lab Test{% endblock %}
+{% block nav_tests %}active{% endblock %}
+
+{% block top_actions %}
+  <a href="{% url 'test_list' %}" class="btn btn-ghost btn-sm">&#8592; Back to Tests</a>
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:520px;">
+  <div class="card-title mb-2">Test Details</div>
+  <form method="post">
+    {% csrf_token %}
+    <div class="form-group">
+      <label class="form-label">Test Name</label>
+      {{ form.name }}
+      {% if form.name.errors %}<div class="form-errors">{{ form.name.errors }}</div>{% endif %}
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description <span class="text-muted">(optional)</span></label>
+      {{ form.description }}
+    </div>
+    <div style="display:flex;gap:8px;margin-top:6px;">
+      <button type="submit" class="btn btn-primary">Create &amp; Set Up Consumptions</button>
+      <a href="{% url 'test_list' %}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

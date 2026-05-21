@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% load core_extras %}
+
+{% block title %}{{ test.name }} — BioLab{% endblock %}
+{% block page_title %}{{ test.name }}{% endblock %}
+{% block nav_tests %}active{% endblock %}
+
+{% block top_actions %}
+  <a href="{% url 'test_list' %}" class="btn btn-ghost btn-sm">&#8592; Back to Tests</a>
+{% endblock %}
+
+{% block content %}
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+
+  <!-- Left: Edit test details -->
+  <div class="card">
+    <div class="card-title mb-2">Test Details</div>
+    <form method="post">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="save_test">
+      <div class="form-group">
+        <label class="form-label">Name</label>
+        {{ form.name }}
+        {% if form.name.errors %}<div class="form-errors">{{ form.name.errors }}</div>{% endif %}
+      </div>
+      <div class="form-group">
+        <label class="form-label">Description <span class="text-muted">(optional)</span></label>
+        {{ form.description }}
+      </div>
+      <button type="submit" class="btn btn-primary btn-sm">Save Details</button>
+    </form>
+  </div>
+
+  <!-- Right: Consumption map -->
+  <div>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Consumption Map</span>
+        <span class="text-muted" style="font-size:12px;">per test run</span>
+      </div>
+
+      {% if consumptions %}
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Item</th>
+              <th>Qty / Run</th>
+              <th>Unit</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in consumptions %}
+            <tr>
+              <td class="fw-600">{{ c.inventory_item.name }}</td>
+              <td class="mono text-accent">{{ c.quantity_consumed_per_test|qty }}</td>
+              <td class="text-muted">{{ c.inventory_item.unit }}</td>
+              <td class="text-right">
+                <form method="post" style="display:inline;" onsubmit="return confirm('Remove {{ c.inventory_item.name }} from this test?')">
+                  {% csrf_token %}
+                  <input type="hidden" name="action" value="delete_consumption">
+                  <input type="hidden" name="consumption_id" value="{{ c.pk }}">
+                  <button type="submit" class="btn btn-danger btn-xs">Remove</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <p class="text-muted" style="font-size:13px;padding:8px 0;">
+        No items mapped yet. Add items below to track consumption.
+      </p>
+      {% endif %}
+
+      <div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">
+        <div class="card-title mb-2" style="font-size:12px;">Add Item to Map</div>
+        <form method="post">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="add_consumption">
+          <div class="form-grid form-grid-2" style="margin-bottom:10px;">
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Inventory Item</label>
+              {{ consumption_form.inventory_item }}
+              {% if consumption_form.inventory_item.errors %}
+                <div class="form-errors">{{ consumption_form.inventory_item.errors }}</div>
+              {% endif %}
+            </div>
+            <div class="form-group" style="margin:0;">
+              <label class="form-label">Qty per Test Run</label>
+              {{ consumption_form.quantity_consumed_per_test }}
+              {% if consumption_form.quantity_consumed_per_test.errors %}
+                <div class="form-errors">{{ consumption_form.quantity_consumed_per_test.errors }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <button type="submit" class="btn btn-secondary btn-sm">+ Add Entry</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endblock %}

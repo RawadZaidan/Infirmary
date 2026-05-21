@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% load core_extras %}
+
+{% block title %}Reports — BioLab{% endblock %}
+{% block page_title %}Reports{% endblock %}
+{% block nav_reports %}active{% endblock %}
+
+{% block top_actions %}
+  <a href="{% url 'reports_export' %}?start_date={{ start_date }}&end_date={{ end_date }}"
+     class="btn btn-secondary btn-sm">&#8595; Export CSV</a>
+  <a href="{% url 'reports_export_pdf' %}?start_date={{ start_date }}&end_date={{ end_date }}"
+     class="btn btn-secondary btn-sm" target="_blank">&#128247; Export PDF</a>
+{% endblock %}
+
+{% block content %}
+
+<!-- Date range filter -->
+<div class="card mb-2">
+  <form method="get" style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">From</label>
+      <input type="date" name="start_date" value="{{ start_date|date:'Y-m-d' }}" class="form-control" style="width:160px;">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">To</label>
+      <input type="date" name="end_date" value="{{ end_date|date:'Y-m-d' }}" class="form-control" style="width:160px;">
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    <a href="{% url 'reports' %}" class="btn btn-ghost btn-sm">Reset</a>
+  </form>
+</div>
+
+<!-- Summary cards -->
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="s-value">{{ total_performed }}</div>
+    <div class="s-label">Tests Performed</div>
+  </div>
+  <div class="summary-card">
+    <div class="s-value">{{ unique_test_types }}</div>
+    <div class="s-label">Unique Test Types</div>
+  </div>
+  <div class="summary-card">
+    <div class="s-value {% if items_below_threshold > 0 %}warn{% endif %}">{{ items_below_threshold }}</div>
+    <div class="s-label">Items Below Threshold</div>
+  </div>
+  <div class="summary-card">
+    <div class="s-value">{{ start_date|date:"M j" }} – {{ end_date|date:"M j" }}</div>
+    <div class="s-label">Report Period</div>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+
+  <!-- Tests performed -->
+  <div class="card">
+    <div class="card-title mb-2">Tests by Type</div>
+    {% if tests_summary %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Test Name</th>
+            <th class="text-right">Total Count</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in tests_summary %}
+          <tr>
+            <td>{{ row.lab_test__name }}</td>
+            <td class="text-right mono text-accent fw-600">{{ row.total }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:20px 0;">No tests logged in this period.</div>
+    {% endif %}
+  </div>
+
+  <!-- Inventory consumption -->
+  <div class="card">
+    <div class="card-title mb-2">Inventory Consumption</div>
+    {% if consumption_summary %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th class="text-right">Consumed</th>
+            <th class="text-right">Current Stock</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in consumption_summary %}
+          <tr class="{% if row.item.is_deficit %}row-deficit{% elif row.item.is_low %}row-low{% endif %}">
+            <td class="fw-600">{{ row.item.name }}<br><span class="text-muted" style="font-size:11px;">{{ row.item.unit }}</span></td>
+            <td class="text-right mono" style="color:var(--low);">{{ row.total_consumed|qty }}</td>
+            <td class="text-right mono {% if row.item.is_deficit %}text-deficit{% elif row.item.is_low %}text-low{% endif %}">
+              {{ row.item.quantity_in_stock|qty }}
+            </td>
+            <td><span class="badge badge-{{ row.item.status|status_class }}">{{ row.item.status }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:20px 0;">No stock deductions in this period.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Low stock alerts -->
+{% if low_stock_items %}
+<div class="card" style="border-color:rgba(210,153,34,0.3);">
+  <div class="card-header">
+    <span class="card-title text-low">Low Stock Alerts</span>
+    <span class="badge badge-low">{{ items_below_threshold }} item{{ items_below_threshold|pluralize }}</span>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Category</th>
+          <th>Unit</th>
+          <th class="text-right">In Stock</th>
+          <th class="text-right">Threshold</th>
+          <th>Status</th>
+          <th class="text-right">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in low_stock_items %}
+        <tr class="{% if item.is_deficit %}row-deficit{% else %}row-low{% endif %}">
+          <td class="fw-600">{{ item.name }}</td>
+          <td><span class="badge {% if item.category == 'REAGENT' %}badge-reagent{% else %}badge-consumable{% endif %}">{{ item.get_category_display }}</span></td>
+          <td class="text-muted">{{ item.unit }}</td>
+          <td class="text-right mono {% if item.is_deficit %}text-deficit{% else %}text-low{% endif %}">{{ item.quantity_in_stock|qty }}</td>
+          <td class="text-right mono text-muted">{{ item.reorder_threshold|qty }}</td>
+          <td><span class="badge badge-{{ item.status|status_class }}">{{ item.status }}</span></td>
+          <td class="text-right">
+            <a href="{% url 'inventory_list' %}" class="btn btn-secondary btn-xs">Restock</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

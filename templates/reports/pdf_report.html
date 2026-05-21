@@ -1,0 +1,584 @@
+{% load core_extras %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BioLab Report — {{ start_date|date:"M j" }}–{{ end_date|date:"M j, Y" }}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg:      #ffffff;
+      --surface: #f6f8fa;
+      --border:  #d0d7de;
+      --text:    #1f2328;
+      --muted:   #57606a;
+      --accent:  #0969da;
+      --ok:      #1a7f37;
+      --ok-bg:   #dafbe1;
+      --low:     #9a6700;
+      --low-bg:  #fff8c5;
+      --red:     #cf222e;
+      --red-bg:  #ffebe9;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #e8eaed;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ── Screen chrome ── */
+    .screen-bar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .screen-bar a {
+      font-size: 13px;
+      color: var(--accent);
+      text-decoration: none;
+    }
+    .screen-bar a:hover { text-decoration: underline; }
+
+    .btn-print {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s;
+    }
+    .btn-print:hover { opacity: .88; }
+
+    /* ── Paper simulation on screen ── */
+    .paper-wrap {
+      padding: 32px 24px 48px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .paper {
+      background: #fff;
+      width: 794px;           /* ~A4 at 96dpi */
+      padding: 48px 52px;
+      box-shadow: 0 2px 16px rgba(0,0,0,.12);
+      border-radius: 4px;
+    }
+
+    /* ── Report header ── */
+    .report-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding-bottom: 18px;
+      margin-bottom: 24px;
+      border-bottom: 2px solid var(--border);
+    }
+    .brand-name {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.4px;
+    }
+    .brand-name span { color: var(--accent); }
+    .brand-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+    .report-meta { text-align: right; font-size: 12px; color: var(--muted); line-height: 1.8; }
+    .report-meta strong { color: var(--text); font-weight: 600; }
+
+    /* ── KPI strip ── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .kpi {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+      text-align: center;
+      background: var(--surface);
+    }
+    .kpi-value {
+      font-size: 30px;
+      font-weight: 700;
+      letter-spacing: -1.5px;
+      line-height: 1;
+      color: var(--accent);
+    }
+    .kpi-value.neutral { color: var(--text); }
+    .kpi-value.warn    { color: var(--low); }
+    .kpi-value.danger  { color: var(--red); }
+    .kpi-value.period  { font-size: 16px; letter-spacing: -0.3px; color: var(--text); }
+    .kpi-label {
+      margin-top: 5px;
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+    }
+
+    /* ── Charts ── */
+    .charts-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .chart-card {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 18px;
+      background: var(--surface);
+    }
+    .chart-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+    .chart-wrap {
+      position: relative;
+      height: 190px;
+    }
+
+    /* ── Section ── */
+    .section { margin-bottom: 24px; }
+    .section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--muted);
+      padding-bottom: 7px;
+      margin-bottom: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: var(--surface); }
+    th {
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--muted);
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 8px 10px;
+      font-size: 12px;
+      border-bottom: 1px solid #eaecef;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+
+    .text-right { text-align: right; }
+    .mono  { font-variant-numeric: tabular-nums; }
+    .bold  { font-weight: 600; }
+    .muted { color: var(--muted); }
+    .c-accent  { color: var(--accent); }
+    .c-low     { color: var(--low); }
+    .c-red     { color: var(--red); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.3px;
+      text-transform: uppercase;
+    }
+    .badge-ok      { background: var(--ok-bg);  color: var(--ok); }
+    .badge-low     { background: var(--low-bg); color: var(--low); }
+    .badge-deficit { background: var(--red-bg); color: var(--red); }
+
+    .row-low    td { background: #fffdf0; }
+    .row-deficit td { background: #fff5f5; }
+
+    /* ── Alert box ── */
+    .alert-box {
+      border: 1px solid #d4a72c88;
+      border-left: 4px solid var(--low);
+      border-radius: 8px;
+      background: #fffdf0;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+    }
+    .alert-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: var(--low);
+      margin-bottom: 12px;
+    }
+
+    /* ── Footer ── */
+    .report-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding-top: 16px;
+      margin-top: 8px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    /* ── Print ── */
+    @media print {
+      body {
+        background: #fff;
+        font-size: 11px;
+      }
+
+      .screen-bar { display: none !important; }
+
+      .paper-wrap {
+        padding: 0;
+        display: block;
+      }
+
+      .paper {
+        width: 100%;
+        padding: 0;
+        box-shadow: none;
+        border-radius: 0;
+      }
+
+      .kpi-value        { font-size: 24px; }
+      .kpi-value.period { font-size: 14px; }
+      .chart-wrap       { height: 160px; }
+
+      td, th { padding: 6px 8px; }
+      td     { font-size: 11px; }
+
+      @page {
+        size: A4 portrait;
+        margin: 14mm 16mm;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Screen-only toolbar -->
+<div class="screen-bar">
+  <a href="{% url 'reports' %}?start_date={{ start_date|date:'Y-m-d' }}&end_date={{ end_date|date:'Y-m-d' }}">
+    ← Back to Reports
+  </a>
+  <button class="btn-print" onclick="window.print()">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+      <path d="M2.5 8a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1z"/>
+      <path d="M5 1a2 2 0 0 0-2 2v2H2a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h1v1a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-1h1a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1V3a2 2 0 0 0-2-2H5zM4 3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2H4V3zm1 5a2 2 0 0 0-2 2v1H2a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v-1a2 2 0 0 0-2-2H5zm7 2v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1z"/>
+    </svg>
+    Save as PDF
+  </button>
+</div>
+
+<!-- Paper sheet -->
+<div class="paper-wrap">
+<div class="paper">
+
+  <!-- Header -->
+  <div class="report-header">
+    <div>
+      <div class="brand-name">Bio<span>Lab</span> Inventory</div>
+      <div class="brand-sub">Infirmary Management System</div>
+    </div>
+    <div class="report-meta">
+      <strong>Period</strong><br>
+      {{ start_date|date:"M j, Y" }} — {{ end_date|date:"M j, Y" }}<br>
+      <strong>Generated</strong><br>
+      {{ generated_on|date:"M j, Y" }}
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="kpi-row">
+    <div class="kpi">
+      <div class="kpi-value">{{ total_performed }}</div>
+      <div class="kpi-label">Tests Performed</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-value neutral">{{ unique_test_types }}</div>
+      <div class="kpi-label">Unique Test Types</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-value {% if items_below_threshold == 0 %}neutral{% elif items_below_threshold <= 2 %}warn{% else %}danger{% endif %}">
+        {{ items_below_threshold }}
+      </div>
+      <div class="kpi-label">Items Below Threshold</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-value period">
+        {{ start_date|date:"M j" }}<br>
+        <span style="font-size:11px;font-weight:400;color:var(--muted);">to {{ end_date|date:"M j, Y" }}</span>
+      </div>
+      <div class="kpi-label">Report Window</div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  {% if tests_summary or consumption_summary %}
+  <div class="charts-row">
+    {% if tests_summary %}
+    <div class="chart-card">
+      <div class="chart-title">Tests by Type</div>
+      <div class="chart-wrap"><canvas id="testsChart"></canvas></div>
+    </div>
+    {% endif %}
+    {% if consumption_summary %}
+    <div class="chart-card">
+      <div class="chart-title">Top Inventory Consumed</div>
+      <div class="chart-wrap"><canvas id="consumptionChart"></canvas></div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Tests performed table -->
+  {% if tests_summary %}
+  <div class="section">
+    <div class="section-title">Tests Performed</div>
+    <table>
+      <thead>
+        <tr>
+          <th style="width:32px">#</th>
+          <th>Test Name</th>
+          <th class="text-right">Count</th>
+          <th class="text-right">Share</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in tests_summary %}
+        <tr>
+          <td class="muted mono">{{ forloop.counter }}</td>
+          <td class="bold">{{ row.lab_test__name }}</td>
+          <td class="text-right mono c-accent bold">{{ row.total }}</td>
+          <td class="text-right mono muted">{% widthratio row.total total_performed 100 %}%</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Inventory consumption table -->
+  {% if consumption_summary %}
+  <div class="section">
+    <div class="section-title">Inventory Consumption</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Unit</th>
+          <th class="text-right">Consumed</th>
+          <th class="text-right">Current Stock</th>
+          <th class="text-right">Threshold</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in consumption_summary %}
+        <tr class="{% if row.item.is_deficit %}row-deficit{% elif row.item.is_low %}row-low{% endif %}">
+          <td class="bold">{{ row.item.name }}</td>
+          <td class="muted">{{ row.item.unit }}</td>
+          <td class="text-right mono c-low bold">{{ row.total_consumed|qty }}</td>
+          <td class="text-right mono {% if row.item.is_deficit %}c-red{% elif row.item.is_low %}c-low{% endif %}">
+            {{ row.item.quantity_in_stock|qty }}
+          </td>
+          <td class="text-right mono muted">{{ row.item.reorder_threshold|qty }}</td>
+          <td>
+            {% if row.item.status == 'DEFICIT' %}<span class="badge badge-deficit">Deficit</span>
+            {% elif row.item.status == 'LOW' %}<span class="badge badge-low">Low</span>
+            {% else %}<span class="badge badge-ok">OK</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Low stock alert -->
+  {% if low_stock_items %}
+  <div class="alert-box">
+    <div class="alert-title">&#9888; Low Stock Alerts &mdash; {{ items_below_threshold }} item{{ items_below_threshold|pluralize }}</div>
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Category</th>
+          <th>Unit</th>
+          <th class="text-right">In Stock</th>
+          <th class="text-right">Threshold</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in low_stock_items %}
+        <tr>
+          <td class="bold">{{ item.name }}</td>
+          <td class="muted">{{ item.get_category_display }}</td>
+          <td class="muted">{{ item.unit }}</td>
+          <td class="text-right mono {% if item.is_deficit %}c-red{% else %}c-low{% endif %}">{{ item.quantity_in_stock|qty }}</td>
+          <td class="text-right mono muted">{{ item.reorder_threshold|qty }}</td>
+          <td>
+            {% if item.status == 'DEFICIT' %}<span class="badge badge-deficit">Deficit</span>
+            {% else %}<span class="badge badge-low">Low</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- Footer -->
+  <div class="report-footer">
+    <span>BioLab Infirmary Management System</span>
+    <span>Generated {{ generated_on|date:"Y-m-d" }}</span>
+  </div>
+
+</div><!-- /paper -->
+</div><!-- /paper-wrap -->
+
+<script>
+(function () {
+  const COLORS = [
+    '#0969da','#1a7f37','#9a6700','#cf222e','#8250df',
+    '#0a3069','#137333','#7a4100','#82071e','#512a97',
+  ];
+
+  const allCharts = [];
+
+  const TOOLTIP = {
+    backgroundColor: '#1f2328',
+    titleColor: '#f0f6ff',
+    bodyColor: '#8b949e',
+    borderColor: '#444c56',
+    borderWidth: 1,
+    padding: 9,
+    cornerRadius: 6,
+  };
+
+  {% if tests_summary %}
+  (function () {
+    const labels  = [{% for row in tests_summary %}"{{ row.lab_test__name|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+    const data    = [{% for row in tests_summary %}{{ row.total }}{% if not forloop.last %},{% endif %}{% endfor %}];
+
+    const c = new Chart(document.getElementById('testsChart'), {
+      type: 'bar',
+      data: {
+        labels: labels.slice(0, 8),
+        datasets: [{
+          data: data.slice(0, 8),
+          backgroundColor: COLORS.slice(0, Math.min(labels.length, 8)),
+          borderRadius: 4,
+          borderSkipped: false,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: { legend: { display: false }, tooltip: TOOLTIP },
+        scales: {
+          x: {
+            ticks: { color: '#57606a', font: { size: 10 }, maxRotation: 35 },
+            grid: { display: false },
+          },
+          y: {
+            ticks: { color: '#57606a', font: { size: 10 }, precision: 0 },
+            grid: { color: '#eaecef' },
+            beginAtZero: true,
+          },
+        },
+      },
+    });
+    allCharts.push(c);
+  })();
+  {% endif %}
+
+  {% if consumption_summary %}
+  (function () {
+    const labels  = [{% for row in consumption_summary %}"{{ row.item.name|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+    const data    = [{% for row in consumption_summary %}{{ row.total_consumed }}{% if not forloop.last %},{% endif %}{% endfor %}];
+
+    const c = new Chart(document.getElementById('consumptionChart'), {
+      type: 'doughnut',
+      data: {
+        labels: labels.slice(0, 8),
+        datasets: [{
+          data: data.slice(0, 8),
+          backgroundColor: COLORS.slice(0, Math.min(labels.length, 8)),
+          borderWidth: 2,
+          borderColor: '#f6f8fa',
+          hoverOffset: 6,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        cutout: '60%',
+        plugins: {
+          legend: {
+            display: true,
+            position: 'right',
+            labels: { color: '#57606a', font: { size: 10 }, boxWidth: 10, padding: 10 },
+          },
+          tooltip: TOOLTIP,
+        },
+      },
+    });
+    allCharts.push(c);
+  })();
+  {% endif %}
+
+  /* Resize charts to fixed px before print so canvas doesn't overflow */
+  function resizeForPrint() {
+    allCharts.forEach(function (c) {
+      c.resize(320, 160);
+    });
+  }
+  function restoreAfterPrint() {
+    allCharts.forEach(function (c) { c.resize(); });
+  }
+
+  window.addEventListener('beforeprint', resizeForPrint);
+  window.addEventListener('afterprint',  restoreAfterPrint);
+  if (window.matchMedia) {
+    window.matchMedia('print').addEventListener('change', function (e) {
+      e.matches ? resizeForPrint() : restoreAfterPrint();
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
