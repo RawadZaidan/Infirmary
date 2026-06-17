@@ -17,6 +17,7 @@
       --ok:           #3fb950;
       --low:          #d29922;
       --deficit:      #f85149;
+      --purple:       #a371f7;
       --sidebar-w:    220px;
     }
 
@@ -51,13 +52,25 @@
     .sidebar-brand .app-name {
       font-size: 15px;
       font-weight: 700;
-      color: var(--text);
+      color: var(--accent);
       letter-spacing: -0.2px;
     }
     .sidebar-brand .app-sub {
       font-size: 11px;
       color: var(--text-muted);
       margin-top: 2px;
+    }
+    .sidebar-brand .app-badge {
+      display: inline-block;
+      margin-top: 5px;
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: rgba(88,166,255,0.12);
+      color: var(--accent);
     }
 
     .sidebar-nav {
@@ -447,6 +460,7 @@
     <div class="sidebar-brand">
       <div class="app-name">BioLab Inventory</div>
       <div class="app-sub">Infirmary Management</div>
+      <div class="app-badge">EVA-Ops</div>
     </div>
 
     <nav class="sidebar-nav">
@@ -470,12 +484,15 @@
         <a href="{% url 'reports' %}" class="nav-link {% block nav_reports %}{% endblock %}">
           <span class="nav-icon">&#9636;</span> Reports
         </a>
+        <a href="{% url 'finances' %}" class="nav-link {% block nav_finances %}{% endblock %}">
+          <span class="nav-icon">&#36;</span> Finances
+        </a>
       </div>
     </nav>
 
     <div class="sidebar-footer">
       <a href="/admin/" class="nav-link" style="font-size:12px;">
-        <span class="nav-icon">&#9881;</span> Django Admin
+        <span class="nav-icon">&#9881;</span> Admin Panel
       </a>
     </div>
   </aside>

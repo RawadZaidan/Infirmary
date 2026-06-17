@@ -1,0 +1,287 @@
+{% extends "base.html" %}
+{% load core_extras %}
+
+{% block title %}Finances — BioLab{% endblock %}
+{% block page_title %}Finances{% endblock %}
+{% block nav_finances %}active{% endblock %}
+
+{% block top_actions %}
+  <button class="btn btn-primary btn-sm" onclick="openSheet('po-sheet')">+ Record Purchase</button>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Purchase Order sheet ── -->
+<div class="sheet-backdrop" id="po-sheet-backdrop" onclick="closeSheet('po-sheet')"></div>
+<div class="sheet" id="po-sheet">
+  <div class="sheet-header">
+    <span class="sheet-title">Record Purchase Order</span>
+    <button class="sheet-close" onclick="closeSheet('po-sheet')" title="Close">&times;</button>
+  </div>
+  <form method="post">
+    {% csrf_token %}
+    <div class="sheet-body">
+      <p class="text-muted mb-2" style="font-size:12px;">
+        Log a purchase and optionally update the item's unit cost to the latest price paid.
+      </p>
+      <div class="form-grid form-grid-2">
+        <div class="form-group" style="grid-column:1/-1;">
+          <label class="form-label">Inventory Item *</label>
+          {{ po_form.inventory_item }}
+          {% if po_form.inventory_item.errors %}<div class="form-errors">{{ po_form.inventory_item.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Quantity Received *</label>
+          {{ po_form.quantity }}
+          {% if po_form.quantity.errors %}<div class="form-errors">{{ po_form.quantity.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Unit Cost ($) *</label>
+          {{ po_form.unit_cost }}
+          {% if po_form.unit_cost.errors %}<div class="form-errors">{{ po_form.unit_cost.errors }}</div>{% endif %}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Supplier</label>
+          {{ po_form.supplier }}
+        </div>
+        <div class="form-group">
+          <label class="form-label">Date</label>
+          {{ po_form.date }}
+        </div>
+        <div class="form-group" style="grid-column:1/-1;">
+          <label class="form-label">Notes</label>
+          {{ po_form.notes }}
+        </div>
+      </div>
+      <div class="alert alert-info mt-2" style="font-size:12px;">
+        Saving will update this item's unit cost to the price entered above.
+      </div>
+    </div>
+    <div class="sheet-footer">
+      <button type="submit" class="btn btn-primary">Save Purchase Order</button>
+      <button type="button" class="btn btn-ghost" onclick="closeSheet('po-sheet')">Cancel</button>
+    </div>
+  </form>
+</div>
+
+<!-- Date range filter -->
+<div class="card mb-2">
+  <form method="get" style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;">
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">Period From</label>
+      <input type="date" name="start_date" value="{{ start_date|date:'Y-m-d' }}" class="form-control" style="width:160px;">
+    </div>
+    <div class="form-group" style="margin:0;">
+      <label class="form-label">To</label>
+      <input type="date" name="end_date" value="{{ end_date|date:'Y-m-d' }}" class="form-control" style="width:160px;">
+    </div>
+    <button type="submit" class="btn btn-primary btn-sm">Apply</button>
+    <a href="{% url 'finances' %}" class="btn btn-ghost btn-sm">Reset</a>
+  </form>
+</div>
+
+<!-- Summary cards -->
+<div class="summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr));">
+  <div class="summary-card">
+    <div class="s-value" style="font-size:22px;">{{ total_inventory_value|currency }}</div>
+    <div class="s-label">Total Inventory Value</div>
+  </div>
+  <div class="summary-card">
+    <div class="s-value {% if period_revenue == 0 %}{% else %}{% endif %}" style="font-size:22px;color:var(--ok);">
+      {{ period_revenue|currency }}
+    </div>
+    <div class="s-label">Estimated Revenue <span class="text-muted">({{ start_date|date:"M j" }}–{{ end_date|date:"M j" }})</span></div>
+  </div>
+  <div class="summary-card">
+    <div class="s-value" style="font-size:22px;color:var(--low);">{{ period_cost|currency }}</div>
+    <div class="s-label">Reagent Cost <span class="text-muted">({{ start_date|date:"M j" }}–{{ end_date|date:"M j" }})</span></div>
+  </div>
+  <div class="summary-card">
+    <div class="s-value {% if net_profit < 0 %}danger{% endif %}" style="font-size:22px;{% if net_profit >= 0 %}color:var(--ok);{% endif %}">
+      {{ net_profit|currency }}
+    </div>
+    <div class="s-label">Net Profit / Loss</div>
+  </div>
+</div>
+
+<!-- Two-column layout: test profitability + inventory valuation -->
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+
+  <!-- Test Profitability -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Test Profitability</span>
+      <span class="text-muted" style="font-size:12px;">{{ start_date|date:"M j" }} – {{ end_date|date:"M j" }}</span>
+    </div>
+    {% if test_financials %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Test</th>
+            <th class="text-right">Runs</th>
+            <th class="text-right">Price</th>
+            <th class="text-right">Cost/Run</th>
+            <th class="text-right">Revenue</th>
+            <th class="text-right">Profit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in test_financials %}
+          <tr>
+            <td class="fw-600">{{ row.test.name }}</td>
+            <td class="text-right mono text-muted">{{ row.count }}</td>
+            <td class="text-right mono">
+              {% if row.selling_price %}
+                <span class="text-ok">{{ row.selling_price|currency }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-right mono">
+              {% if row.cost_per_run %}
+                <span style="color:var(--low);">{{ row.cost_per_run|currency }}</span>
+              {% else %}
+                <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td class="text-right mono text-accent fw-600">{{ row.total_revenue|currency }}</td>
+            <td class="text-right mono fw-600 {% if row.total_profit < 0 %}text-deficit{% elif row.total_profit > 0 %}text-ok{% else %}text-muted{% endif %}">
+              {{ row.total_profit|currency }}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr style="border-top:2px solid var(--border);">
+            <td class="fw-600 text-muted" colspan="4">Totals</td>
+            <td class="text-right mono fw-600 text-accent">{{ period_revenue|currency }}</td>
+            <td class="text-right mono fw-600 {% if net_profit < 0 %}text-deficit{% else %}text-ok{% endif %}">
+              {{ net_profit|currency }}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">No tests logged in this period.</div>
+    {% endif %}
+    <div class="mt-2" style="font-size:11px;color:var(--text-muted);padding-top:8px;border-top:1px solid var(--border);">
+      * Revenue requires selling price set on each test. Cost requires unit cost set on inventory items.
+    </div>
+  </div>
+
+  <!-- Inventory Valuation -->
+  <div class="card">
+    <div class="card-header">
+      <span class="card-title">Inventory Valuation</span>
+      <span class="badge" style="background:rgba(88,166,255,0.12);color:var(--accent);">{{ total_inventory_value|currency }}</span>
+    </div>
+    {% if costed_items %}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Cat.</th>
+            <th class="text-right">In Stock</th>
+            <th class="text-right">Unit Cost</th>
+            <th class="text-right">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in costed_items %}
+          <tr class="{% if item.is_deficit %}row-deficit{% elif item.is_low %}row-low{% endif %}">
+            <td class="fw-600">{{ item.name }}<br><span class="text-muted" style="font-size:11px;">{{ item.unit }}</span></td>
+            <td>
+              <span class="badge {% if item.category == 'REAGENT' %}badge-reagent{% else %}badge-consumable{% endif %}">
+                {{ item.get_category_display }}
+              </span>
+            </td>
+            <td class="text-right mono {% if item.is_deficit %}text-deficit{% elif item.is_low %}text-low{% endif %}">
+              {{ item.quantity_in_stock|qty }}
+            </td>
+            <td class="text-right mono text-muted">{{ item.unit_cost|currency }}</td>
+            <td class="text-right mono fw-600 text-accent">
+              {% with val=item.stock_value %}
+                {% if val is not None %}{{ val|currency }}{% else %}—{% endif %}
+              {% endwith %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+      No unit costs set yet.<br>
+      <span style="font-size:12px;">Edit inventory items or record a purchase order to set costs.</span>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Purchase Order History -->
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Recent Purchase Orders</span>
+    <button class="btn btn-secondary btn-sm" onclick="openSheet('po-sheet')">+ New PO</button>
+  </div>
+  {% if recent_pos %}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Item</th>
+          <th>Supplier</th>
+          <th class="text-right">Qty</th>
+          <th class="text-right">Unit Cost</th>
+          <th class="text-right">Total</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for po in recent_pos %}
+        <tr>
+          <td class="text-muted mono" style="white-space:nowrap;">{{ po.date|date:"M j, Y" }}</td>
+          <td class="fw-600">{{ po.inventory_item.name }}</td>
+          <td class="text-muted">{{ po.supplier|default:"—" }}</td>
+          <td class="text-right mono">{{ po.quantity|qty }} {{ po.inventory_item.unit }}</td>
+          <td class="text-right mono text-muted">{{ po.unit_cost|currency }}</td>
+          <td class="text-right mono fw-600 text-accent">{{ po.total_cost|currency }}</td>
+          <td class="text-muted" style="font-size:12px;">{{ po.notes|default:"—"|truncatechars:40 }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    No purchase orders recorded yet.<br>
+    <span style="font-size:12px;">Click <strong>+ Record Purchase</strong> to log your first one.</span>
+  </div>
+  {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function openSheet(id) {
+    document.getElementById(id).classList.add('open');
+    document.getElementById(id + '-backdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeSheet(id) {
+    document.getElementById(id).classList.remove('open');
+    document.getElementById(id + '-backdrop').classList.remove('open');
+    document.body.style.overflow = '';
+  }
+
+  {% if po_form.errors %}
+  document.addEventListener('DOMContentLoaded', function() { openSheet('po-sheet'); });
+  {% endif %}
+</script>
+{% endblock %}

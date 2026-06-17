@@ -15,4 +15,5 @@ urlpatterns = [
     path('reports/', views.reports, name='reports'),
     path('reports/export/', views.reports_export, name='reports_export'),
     path('reports/export-pdf/', views.reports_export_pdf, name='reports_export_pdf'),
+    path('finances/', views.finances, name='finances'),
 ]

@@ -13,6 +13,7 @@ from .forms import (
     DailyLogEntryForm,
     InventoryItemForm,
     LabTestForm,
+    PurchaseOrderForm,
     RestockForm,
     TestConsumptionForm,
 )
@@ -21,6 +22,7 @@ from .models import (
     DailyLogEntry,
     InventoryItem,
     LabTest,
+    PurchaseOrder,
     StockMovement,
     TestConsumption,
 )
@@ -397,6 +399,119 @@ def reports_export_pdf(request):
         'low_stock_items': low_stock_items,
         'items_below_threshold': low_stock_items.count(),
         'generated_on': today,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Finances
+# ---------------------------------------------------------------------------
+
+@login_required
+def finances(request):
+    today = date.today()
+    default_start = today.replace(day=1)
+
+    form = DateRangeForm(request.GET or None)
+    if form.is_valid():
+        start_date = form.cleaned_data['start_date']
+        end_date = form.cleaned_data['end_date']
+    else:
+        start_date = default_start
+        end_date = today
+
+    # --- Inventory valuation ---
+    all_items = list(InventoryItem.objects.all())
+    total_inventory_value = sum(
+        (item.unit_cost or Decimal('0')) * item.quantity_in_stock
+        for item in all_items
+    )
+    costed_items = [i for i in all_items if i.unit_cost]
+    costed_items.sort(key=lambda i: (i.unit_cost * i.quantity_in_stock), reverse=True)
+
+    # --- Test profitability for period ---
+    entries_qs = DailyLogEntry.objects.filter(
+        daily_log__date__gte=start_date,
+        daily_log__date__lte=end_date,
+    ).select_related('lab_test')
+
+    # Aggregate counts per test
+    performed_map = {}
+    for entry in entries_qs:
+        tid = entry.lab_test_id
+        if tid not in performed_map:
+            performed_map[tid] = {'test': entry.lab_test, 'count': 0}
+        performed_map[tid]['count'] += entry.quantity_performed
+
+    # Cost per test run: sum(unit_cost * qty_consumed) for each mapped item
+    test_ids = list(performed_map.keys())
+    consumptions = TestConsumption.objects.filter(
+        lab_test_id__in=test_ids
+    ).select_related('inventory_item') if test_ids else []
+
+    cost_per_test = {}
+    for c in consumptions:
+        tid = c.lab_test_id
+        if tid not in cost_per_test:
+            cost_per_test[tid] = Decimal('0')
+        if c.inventory_item.unit_cost:
+            cost_per_test[tid] += c.inventory_item.unit_cost * c.quantity_consumed_per_test
+
+    test_financials = []
+    period_revenue = Decimal('0')
+    period_cost = Decimal('0')
+
+    for tid, data in performed_map.items():
+        test = data['test']
+        count = data['count']
+        cpr = cost_per_test.get(tid, Decimal('0'))
+        selling = test.selling_price or Decimal('0')
+        row_rev = selling * count
+        row_cost = cpr * count
+        test_financials.append({
+            'test': test,
+            'count': count,
+            'selling_price': selling,
+            'cost_per_run': cpr,
+            'margin': selling - cpr if test.selling_price is not None else None,
+            'total_revenue': row_rev,
+            'total_cost': row_cost,
+            'total_profit': row_rev - row_cost,
+        })
+        period_revenue += row_rev
+        period_cost += row_cost
+
+    test_financials.sort(key=lambda x: x['total_revenue'], reverse=True)
+
+    # --- Purchase orders ---
+    po_form = PurchaseOrderForm()
+    if request.method == 'POST':
+        po_form = PurchaseOrderForm(request.POST)
+        if po_form.is_valid():
+            po = po_form.save()
+            # Update the item's unit_cost to the latest purchase price
+            item = po.inventory_item
+            item.unit_cost = po.unit_cost
+            item.save(update_fields=['unit_cost', 'updated_at'])
+            messages.success(request, f'Purchase order recorded for {item.name}.')
+            return redirect('finances')
+        else:
+            messages.error(request, 'Please correct the errors below.')
+
+    recent_pos = PurchaseOrder.objects.select_related('inventory_item').all()[:20]
+
+    return render(request, 'finances/overview.html', {
+        'form': form,
+        'po_form': po_form,
+        'start_date': start_date,
+        'end_date': end_date,
+        'total_inventory_value': total_inventory_value,
+        'period_revenue': period_revenue,
+        'period_cost': period_cost,
+        'net_profit': period_revenue - period_cost,
+        'test_financials': test_financials,
+        'costed_items': costed_items,
+        'recent_pos': recent_pos,
+        'all_items': all_items,
     })
 
 

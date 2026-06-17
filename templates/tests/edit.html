@@ -28,6 +28,14 @@
         <label class="form-label">Description <span class="text-muted">(optional)</span></label>
         {{ form.description }}
       </div>
+      <div style="border-top:1px solid var(--border);margin:14px 0 12px;padding-top:12px;">
+        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);margin-bottom:8px;">Financials</div>
+        <div class="form-group">
+          <label class="form-label">Selling Price ($) <span class="text-muted">(revenue per test run)</span></label>
+          {{ form.selling_price }}
+          {% if form.selling_price.errors %}<div class="form-errors">{{ form.selling_price.errors }}</div>{% endif %}
+        </div>
+      </div>
       <button type="submit" class="btn btn-primary btn-sm">Save Details</button>
     </form>
   </div>

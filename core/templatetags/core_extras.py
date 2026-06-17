@@ -35,3 +35,24 @@ def qty(value):
         return format(normalized, 'f')
     except Exception:
         return value
+
+
+@register.filter
+def currency(value):
+    """Format as currency with 2 decimal places, e.g. $1,234.56"""
+    try:
+        from decimal import Decimal
+        d = Decimal(str(value))
+        return '${:,.2f}'.format(d)
+    except Exception:
+        return value
+
+
+@register.filter
+def pct(value):
+    """Format as percentage with 1 decimal place."""
+    try:
+        from decimal import Decimal
+        return '{:.1f}%'.format(Decimal(str(value)))
+    except Exception:
+        return value

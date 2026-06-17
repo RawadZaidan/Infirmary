@@ -1,18 +1,19 @@
 from decimal import Decimal
 from django import forms
-from .models import InventoryItem, LabTest, TestConsumption, DailyLogEntry
+from .models import InventoryItem, LabTest, TestConsumption, DailyLogEntry, PurchaseOrder
 
 
 class InventoryItemForm(forms.ModelForm):
     class Meta:
         model = InventoryItem
-        fields = ['name', 'category', 'unit', 'quantity_in_stock', 'reorder_threshold']
+        fields = ['name', 'category', 'unit', 'quantity_in_stock', 'reorder_threshold', 'unit_cost']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Item name'}),
             'category': forms.Select(attrs={'class': 'form-control'}),
             'unit': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'e.g. mL, pieces, boxes'}),
             'quantity_in_stock': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001', 'min': '0'}),
             'reorder_threshold': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001', 'min': '0'}),
+            'unit_cost': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001', 'min': '0', 'placeholder': 'Cost per unit (optional)'}),
         }
 
 
@@ -30,10 +31,11 @@ class RestockForm(forms.Form):
 class LabTestForm(forms.ModelForm):
     class Meta:
         model = LabTest
-        fields = ['name', 'description']
+        fields = ['name', 'description', 'selling_price']
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Test name'}),
             'description': forms.Textarea(attrs={'class': 'form-control', 'rows': 3, 'placeholder': 'Optional description'}),
+            'selling_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001', 'min': '0', 'placeholder': 'Revenue per test run (optional)'}),
         }
 
 
@@ -64,3 +66,17 @@ class DateRangeForm(forms.Form):
     end_date = forms.DateField(
         widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
     )
+
+
+class PurchaseOrderForm(forms.ModelForm):
+    class Meta:
+        model = PurchaseOrder
+        fields = ['inventory_item', 'quantity', 'unit_cost', 'supplier', 'date', 'notes']
+        widgets = {
+            'inventory_item': forms.Select(attrs={'class': 'form-control'}),
+            'quantity': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001', 'min': '0.0001', 'placeholder': 'Quantity received'}),
+            'unit_cost': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.0001', 'min': '0', 'placeholder': 'Cost per unit'}),
+            'supplier': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Supplier name (optional)'}),
+            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'notes': forms.Textarea(attrs={'class': 'form-control', 'rows': 2, 'placeholder': 'Notes (optional)'}),
+        }
